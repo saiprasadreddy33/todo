@@ -1,0 +1,82 @@
+#!/usr/bin/env ruby
+require 'thor'
+require 'httparty'
+require 'json'
+
+class TodoCLI < Thor
+  BASE_URL = "http://localhost:3000/todos"
+
+  desc "list", "Show all TODOs"
+  def list
+    response = HTTParty.get(BASE_URL)
+    todos = JSON.parse(response.body)
+puts "DEBUG: #{todos.inspect}"
+    if todos.empty?
+      puts "No TODOs found!"
+    else
+      todos.each_with_index do |todo, index|
+        status = todo["completed"] ? "✅" : "⏳"
+        puts "#{index + 1}. [#{status}] #{todo["title"]} - #{todo["description"]} (ID: #{todo["id"]})"
+      end
+    end
+  end
+
+  desc "add", "Add a new TODO"
+  def add
+    print "Enter title: "
+    title = STDIN.gets.chomp
+
+    print "Enter description: "
+    description = STDIN.gets.chomp
+
+    response = HTTParty.post(BASE_URL,
+      body: { todo: { title: title, description: description, completed: false } }.to_json,
+      headers: { 'Content-Type' => 'application/json' }
+    )
+
+    puts response.code == 201 ? "✅ Added!" : "❌ Error: #{response.body}"
+  end
+
+  desc "update ID", "Update a TODO by ID"
+  def update(id)
+    print "New title: "
+    title = STDIN.gets.chomp
+
+    print "New description: "
+    description = STDIN.gets.chomp
+
+    print "Is it completed? (yes/no): "
+    completed = STDIN.gets.chomp.downcase == "yes"
+
+    response = HTTParty.put("#{BASE_URL}/#{id}",
+      body: { todo: { title: title, description: description, completed: completed } }.to_json,
+      headers: { 'Content-Type' => 'application/json' }
+    )
+
+    puts response.code == 200 ? "✅ Updated!" : "❌ Error: #{response.body}"
+  end
+
+  desc "mark ID", "Mark a TODO as complete"
+  def mark(id)
+    response = HTTParty.put("#{BASE_URL}/#{id}",
+      body: { todo: { completed: true } }.to_json,
+      headers: { 'Content-Type' => 'application/json' }
+    )
+
+    puts response.code == 200 ? "✅ Marked as complete!" : "❌ Error: #{response.body}"
+  end
+
+  desc "delete ID", "Delete a TODO by ID"
+  def delete(id)
+    print "Are you sure? (yes/no): "
+    confirm = STDIN.gets.chomp.downcase
+    return puts "Cancelled." unless confirm == "yes"
+
+    response = HTTParty.delete("#{BASE_URL}/#{id}")
+    puts response.code == 204 ? "🗑️ Deleted!" : "❌ Error: #{response.body}"
+  end
+
+  def self.exit_on_failure?; true; end
+end
+
+TodoCLI.start(ARGV)
